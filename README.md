@@ -2,6 +2,9 @@
 
 High-performance key-value store with an in-memory storage engine (Part A) and a networked server that speaks the Redis protocol (Part B).
 
+> Full documentation with architecture, APIs, and benchmarks: see [`docs/mainpage.md`](docs/mainpage.md).
+> Quick links: [Architecture](docs/mainpage.md#architecture) · [Getting Started](docs/mainpage.md#getting-started) · [Implementation Differences](docs/mainpage.md#implementation-differences) · [API Docs](docs/mainpage.md#api-documentation) · [Performance](docs/mainpage.md#performance-optimization)
+
 ## Features
 
 - In-memory and disk-backed storage engines

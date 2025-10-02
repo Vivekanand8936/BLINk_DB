@@ -1,0 +1,65 @@
+# Build artifacts
+/build/
+cmake-build-*/
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.dSYM/
+
+# Debug/profile files
+*.gcno
+*.gcda
+*.gcov
+*.prof
+*.profraw
+*.profdata
+
+# Compiler/intermediate files
+*.pch
+*.pdb
+*.mod
+*.dep
+*.d
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.code-workspace
+
+# MacOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Logs
+*.log
+
+# Doxygen outputs
+docs/doxygen/html/
+docs/doxygen/latex/
+
+# Local binaries and data
+part-a/blinkdb
+part-b/blinkdb_server
+part-b/blinkdb_client
+part-b/benchmark
+part-a/src/*.o
+part-b/src/*.o
+part-a/disk_storage/*.dat
+part-b/disk_storage/*.txt
+
+# Node/npm (if any)
+node_modules/

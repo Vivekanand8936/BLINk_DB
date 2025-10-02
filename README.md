@@ -1,21 +1,38 @@
-# BLINK DB Project
+# BLINK DB
 
-A high-performance key-value store implementation with both in-memory and disk-based storage capabilities.
+High-performance key-value store with an in-memory storage engine (Part A) and a networked server that speaks the Redis protocol (Part B).
 
-## Project Structure
+## Features
 
-- `part-a/`: In-memory storage engine implementation
-- `part-b/`: Network server implementation with Redis protocol support
+- In-memory and disk-backed storage engines
+- Redis protocol (RESP) support in server mode
+- Non-blocking I/O (kqueue/epoll), TCP_NODELAY for low latency
+- Thread-safe LRU cache, async write buffering and batch writes
+- Benchmarks and Doxygen documentation
+
+## Repository Structure
+
+```
+.
+├─ part-a/                 # Basic storage engine + REPL
+│  ├─ src/
+│  └─ disk_storage/
+├─ part-b/                 # Network server, client, and benchmarks
+│  ├─ src/
+│  ├─ results/
+│  └─ run_redis_benchmarks.sh
+└─ docs/                   # Doxygen docs and mainpage
+```
 
 ## Prerequisites
 
 - C++17 compatible compiler (g++ or clang++)
-- Make
-- pthread library
-- kqueue (macOS) or epoll (Linux) support
-- Doxygen (for documentation)
+- make
+- pthread
+- kqueue (macOS) or epoll (Linux)
+- Doxygen (optional, for docs)
 
-## Building the Project
+## Build
 
 ### Part A: Storage Engine
 ```bash
@@ -23,7 +40,6 @@ cd part-a
 make clean
 make
 ```
-./blinkdb
 
 ### Part B: Network Server
 ```bash
@@ -32,145 +48,63 @@ make clean
 make
 ```
 
-## Running the Project
-### Part B: Network Server
+## Run
+
+### Part A REPL
+```bash
+cd part-a
+./blinkdb
+```
+
+### Part B Server and Client
 ```bash
 cd part-b
 ./blinkdb_server
-```
-cd part-b 
+
+# in another terminal
+cd part-b
 ./blinkdb_client
-...
+```
 
-### Basic Operations
+## Basic Commands (RESP)
 
-1. **SET**
-   ```bash
-   SET <key> <value>
-   ```
-   Sets a key-value pair in the database.
-   - Returns: `+OK` on success, `-ERR` on failure
-   - Example: `SET name John`
+- **SET**: `SET <key> <value>` → `+OK`
+- **GET**: `GET <key>` → value or `$-1`
+- **DEL**: `DEL <key>` → `:1` if deleted, `:0` otherwise
+- **CLEAR/FLUSHDB/FLUSHALL** → `+OK`
+- **PING** → `+PONG`
+- **EXIT** → `+OK`
 
-2. **GET**
-   ```bash
-   GET <key>
-   ```
-   Retrieves the value associated with a key.
-   - Returns: The value if found, `$-1` if not found
-   - Example: `GET name`
+## Benchmarks
 
-3. **DEL**
-   ```bash
-   DEL <key>
-   ```
-   Deletes a key-value pair from the database.
-   - Returns: `:1` if deleted, `:0` if not found
-   - Example: `DEL name`
-
-### Database Management
-
-4. **CLEAR**
-   ```bash
-   CLEAR
-   ```
-   Removes all keys from the database.
-   - Returns: `+OK`
-   - Example: `CLEAR`
-
-5. **FLUSHDB**
-   ```bash
-   FLUSHDB
-   ```
-   Alias for CLEAR. Removes all keys from the database.
-   - Returns: `+OK`
-   - Example: `FLUSHDB`
-
-6. **FLUSHALL**
-   ```bash
-   FLUSHALL
-   ```
-   Alias for CLEAR. Removes all keys from the database.
-   - Returns: `+OK`
-   - Example: `FLUSHALL`
-
-### Server Management
-
-7. **PING**
-   ```bash
-   PING
-   ```
-   Tests the server connection.
-   - Returns: `+PONG`
-   - Example: `PING`
-
-8. **EXIT**
-   ```bash
-   EXIT
-   ```
-   Gracefully shuts down the server.
-   - Returns: `+OK`
-   - Example: `EXIT`
-
-## Testing
-
-### Running Benchmarks
+Run built-in script:
 ```bash
 cd part-b
 ./run_redis_benchmarks.sh
 ```
 
-### Using redis-benchmark
+Or using redis-benchmark:
 ```bash
-redis-benchmark -p 9001 -n 10000 -c 100
+redis-benchmark -p 9001 -n 100000 -c 100
 ```
 
-## Performance Features
+Results are stored under `part-b/results/`.
 
-- Asynchronous write operations
-- Write buffering with configurable batch size
-- LRU cache with configurable size
-- Non-blocking I/O using kqueue/epoll
-- TCP_NODELAY enabled for reduced latency
-- Optimized disk index management
+## Configuration Highlights
 
-## Configuration
-
-Key configuration parameters in `storage_engine.h`:
-- `MAX_CACHE_SIZE`: Maximum number of entries in memory cache (default: 1M)
-- `WRITE_BUFFER_SIZE`: Size of write buffer (default: 100K)
-- `BATCH_SIZE`: Number of entries to batch write (default: 50K)
-
-## Error Handling
-
-The server implements proper error handling for:
-- Invalid commands
-- Missing arguments
-- Connection issues
-- Disk I/O errors
-- Memory constraints
-
-## Protocol
-
-The server implements a subset of the Redis protocol (RESP):
-- Simple strings: `+OK\r\n`
-- Errors: `-ERR message\r\n`
-- Integers: `:123\r\n`
-- Bulk strings: `$length\r\nstring\r\n`
-- Arrays: `*length\r\n$length\r\nstring\r\n`
+Key parameters (see `storage_engine.h`):
+- `MAX_CACHE_SIZE` – max in-memory entries
+- `WRITE_BUFFER_SIZE` – write buffer size
+- `BATCH_SIZE` – batch write size
 
 ## Documentation
 
-To generate documentation:
+Generate docs:
 ```bash
 doxygen Doxyfile
 ```
+Outputs to `docs/doxygen/html` and `docs/doxygen/latex`. See `docs/mainpage.md` for an overview.
 
-The documentation will be generated in the `docs` directory in both HTML and PDF formats.
+## License
 
-## Performance Results
-
-Performance results for different workloads are stored in the `results` directory:
-- `result_10000_10.txt`: 10,000 requests, 10 connections
-- `result_100000_100.txt`: 100,000 requests, 100 connections
-- `result_1000000_1000.txt`: 1,000,000 requests, 1000 connections
+MIT (add a `LICENSE` file if applicable).

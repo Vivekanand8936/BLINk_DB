@@ -1091,6 +1091,714 @@ void Server::handle_client_data(int client_fd) {
 
 ---
 
+## Interview Preparation: Deep Dive into Technical Concepts
+
+This section provides comprehensive, interview-ready explanations of all technical terms and concepts used in BLINK DB. Each explanation includes the "what", "why", "how", and "trade-offs" - exactly what interviewers want to hear.
+
+### 1. Hash Table / Hash Map - Complete Explanation
+
+**What is a Hash Table?**
+A hash table (also called hash map) is a data structure that implements an associative array, a structure that can map keys to values. It uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found.
+
+**Detailed How It Works:**
+
+1. **Hash Function:**
+   - Takes a key as input
+   - Produces a hash code (integer)
+   - Maps to an array index
+   - Example: `hash("hello") % array_size = index`
+
+2. **Storage:**
+   - Values stored in array at computed index
+   - Direct access via index (O(1))
+
+3. **Collision Handling:**
+   - **Chaining:** Each bucket contains a linked list of entries
+   - **Open Addressing:** Find next available slot (linear probing, quadratic probing)
+   - `std::unordered_map` uses chaining
+
+**Why Use Hash Tables?**
+- **O(1) average case** for insert, delete, and lookup
+- Much faster than O(log n) for balanced trees
+- Perfect for key-value stores
+- Efficient memory usage
+
+**Trade-offs:**
+- **Pros:** Fast operations, simple implementation
+- **Cons:** 
+  - Worst case O(n) if all keys hash to same bucket
+  - No ordering (keys not sorted)
+  - Memory overhead for buckets
+
+**Interview Answer:**
+"In BLINK DB, I use `std::unordered_map` which is a hash table implementation. It provides O(1) average case complexity for all operations, which is crucial for a key-value store. The hash function maps string keys to array indices, and collisions are handled using chaining. This gives us constant-time lookups, which is essential for database performance."
+
+### 2. LRU Cache - Complete Explanation
+
+**What is LRU Cache?**
+LRU (Least Recently Used) is a cache eviction algorithm that removes the least recently used items when the cache reaches its capacity limit.
+
+**Detailed How It Works:**
+
+1. **Data Structure Combination:**
+   - **Hash Map:** For O(1) key lookup
+   - **Doubly-Linked List:** For O(1) insertion/deletion and maintaining order
+
+2. **Operations:**
+
+   **GET Operation:**
+   ```
+   1. Look up key in hash map: O(1)
+   2. If found:
+      - Get node from hash map
+      - Move node to front of list (most recent): O(1)
+      - Return value
+   3. If not found: Return null or fetch from disk
+   ```
+
+   **PUT Operation:**
+   ```
+   1. Check if key exists in hash map: O(1)
+   2. If exists:
+      - Update value
+      - Move to front: O(1)
+   3. If not exists:
+      - If cache full: Remove tail node (LRU): O(1)
+      - Create new node
+      - Add to front: O(1)
+      - Store in hash map: O(1)
+   ```
+
+**Why LRU?**
+- **Temporal Locality:** Recently accessed items likely to be accessed again
+- **Better Cache Hit Ratio:** Keeps frequently used data in memory
+- **Predictable Performance:** O(1) for all operations
+
+**Implementation Details:**
+
+**Part A (Basic):**
+- Uses `std::list` for access order tracking
+- `std::unordered_map` for storage
+- When accessed, key moved to end of list
+- Eviction removes from front of list
+
+**Part B (Advanced):**
+- Custom doubly-linked list implementation
+- More efficient than `std::list` for this use case
+- Direct pointer manipulation for O(1) operations
+- Thread-safe with mutex protection
+
+**Interview Answer:**
+"I implemented LRU cache using a combination of hash map and doubly-linked list. The hash map provides O(1) lookup, while the linked list maintains access order. When an item is accessed, I move it to the front of the list. When the cache is full, I remove the tail node (least recently used). This gives O(1) complexity for all operations while keeping frequently accessed data in memory, which dramatically improves performance."
+
+### 3. Mutex and Thread Safety - Complete Explanation
+
+**What is a Mutex?**
+A mutex (mutual exclusion) is a synchronization primitive that ensures only one thread can access a shared resource at a time.
+
+**Detailed How It Works:**
+
+1. **Lock Acquisition:**
+   - Thread calls `lock()` on mutex
+   - If unlocked: Thread acquires lock, continues
+   - If locked: Thread blocks until lock is released
+
+2. **Critical Section:**
+   - Code between lock and unlock
+   - Only one thread can execute at a time
+   - Ensures data consistency
+
+3. **Lock Release:**
+   - Thread calls `unlock()`
+   - Waiting threads can now acquire lock
+
+**RAII Pattern:**
+```cpp
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Critical section
+    // Lock automatically released when lock goes out of scope
+}
+```
+
+**Why RAII?**
+- **Automatic Cleanup:** Lock released even if exception occurs
+- **Exception Safety:** Prevents deadlocks
+- **No Manual Management:** Can't forget to unlock
+
+**Thread Safety in BLINK DB:**
+
+**Part A:**
+- Single mutex protects all operations
+- Simple but may cause contention
+- All operations are atomic (protected)
+
+**Part B:**
+- Multiple mutexes for different resources
+- Cache mutex, disk storage mutex, write queue mutex
+- Reduces contention, improves parallelism
+
+**Common Issues:**
+
+1. **Deadlock:**
+   - Two threads waiting for each other's locks
+   - Prevention: Always acquire locks in same order
+
+2. **Race Condition:**
+   - Multiple threads access shared data without synchronization
+   - Result: Undefined behavior, data corruption
+
+3. **Lock Contention:**
+   - Multiple threads waiting for same lock
+   - Solution: Fine-grained locking, lock-free data structures
+
+**Interview Answer:**
+"I use mutexes to ensure thread safety. All operations are protected by `std::lock_guard`, which uses RAII to automatically release locks. This prevents race conditions and ensures data consistency. In Part B, I use separate mutexes for cache and disk operations to reduce contention and improve parallelism."
+
+### 4. Non-Blocking I/O and Event-Driven Architecture - Complete Explanation
+
+**What is Non-Blocking I/O?**
+Non-blocking I/O allows operations to return immediately without waiting for the operation to complete.
+
+**Blocking vs Non-Blocking:**
+
+**Blocking I/O:**
+```cpp
+char buffer[1024];
+int bytes = read(socket_fd, buffer, 1024);  // Blocks here until data arrives
+// Can't handle other clients while waiting
+```
+
+**Non-Blocking I/O:**
+```cpp
+fcntl(socket_fd, F_SETFL, O_NONBLOCK);
+int bytes = read(socket_fd, buffer, 1024);  // Returns immediately
+if (bytes < 0 && errno == EAGAIN) {
+    // No data available, try again later
+    // Can handle other clients now
+}
+```
+
+**Event-Driven Architecture:**
+
+**How It Works:**
+1. **Register Interest:** Tell kernel what events to monitor
+2. **Event Loop:** Wait for events (non-blocking)
+3. **Process Events:** Handle events as they occur
+4. **Repeat:** Go back to waiting
+
+**kqueue (macOS/FreeBSD):**
+
+**What is kqueue?**
+- Kernel event notification mechanism
+- Monitors multiple file descriptors simultaneously
+- Efficient for high-concurrency servers
+
+**How kqueue Works:**
+```cpp
+// 1. Create kqueue
+int kq = kqueue();
+
+// 2. Register file descriptor for events
+struct kevent ev;
+EV_SET(&ev, socket_fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+kevent(kq, &ev, 1, NULL, 0, NULL);
+
+// 3. Wait for events
+struct kevent events[MAX_EVENTS];
+int nev = kevent(kq, NULL, 0, events, MAX_EVENTS, NULL);
+
+// 4. Process events
+for (int i = 0; i < nev; i++) {
+    if (events[i].filter == EVFILT_READ) {
+        // Data available for reading
+        handle_read(events[i].ident);
+    }
+}
+```
+
+**Why Event-Driven?**
+- **Scalability:** Can handle thousands of connections
+- **Efficiency:** No thread per connection overhead
+- **Responsiveness:** Processes events as they occur
+
+**Comparison with Alternatives:**
+
+| Model | Connections | Threads | Memory | Complexity |
+|-------|-------------|----------|--------|------------|
+| Thread-per-connection | 1000 | 1000 | High | Low |
+| Thread pool | 1000 | 10-100 | Medium | Medium |
+| Event-driven (kqueue/epoll) | 1000 | 1 | Low | High |
+
+**Interview Answer:**
+"I use non-blocking I/O with kqueue for event-driven architecture. This allows the server to handle thousands of concurrent connections with a single thread. kqueue monitors multiple file descriptors and notifies when events occur. This is much more efficient than thread-per-connection models, especially for I/O-bound workloads like a database server."
+
+### 5. Asynchronous Operations - Complete Explanation
+
+**What is Asynchronous?**
+Asynchronous operations don't block the caller. The operation is initiated and the caller continues immediately, with results available later.
+
+**Synchronous vs Asynchronous:**
+
+**Synchronous (Blocking):**
+```cpp
+void set(const std::string& key, const std::string& value) {
+    // 1. Update cache: O(1)
+    cache_[key] = value;
+    
+    // 2. Write to disk: BLOCKS HERE (slow!)
+    write_to_disk(key, value);  // Takes 10ms
+    
+    // 3. Return: Only after disk write completes
+    return;  // Total time: 10ms+
+}
+```
+
+**Asynchronous (Non-Blocking):**
+```cpp
+void set(const std::string& key, const std::string& value) {
+    // 1. Update cache: O(1)
+    cache_[key] = value;
+    
+    // 2. Queue for background write: O(1)
+    write_queue_.push({key, value});  // Returns immediately
+    
+    // 3. Return: Immediately
+    return;  // Total time: <1ms
+    
+    // Background thread handles disk write later
+}
+```
+
+**Implementation in BLINK DB:**
+
+**Background Worker Thread:**
+```cpp
+void async_write_worker() {
+    while (running_) {
+        // Wait for work
+        std::unique_lock<std::mutex> lock(write_mutex_);
+        write_cv_.wait(lock, [this] { 
+            return !running_ || !write_queue_.empty(); 
+        });
+        
+        // Process queue
+        while (!write_queue_.empty()) {
+            auto [key, value] = write_queue_.front();
+            write_queue_.pop();
+            lock.unlock();
+            
+            // Write to disk (slow operation)
+            disk_storage_->put(key, value);
+            
+            lock.lock();
+        }
+    }
+}
+```
+
+**Condition Variables:**
+- Allows thread to wait until condition is met
+- More efficient than polling (checking repeatedly)
+- Wakes up when condition becomes true
+
+**Benefits:**
+- **Low Latency:** Operations return immediately
+- **High Throughput:** Can process many requests while writes happen in background
+- **Better Resource Usage:** CPU not blocked on I/O
+
+**Trade-offs:**
+- **Complexity:** More complex code
+- **Data Loss Risk:** Data in queue lost if crash
+- **Ordering:** Writes may complete out of order
+
+**Interview Answer:**
+"I use asynchronous writes with a background worker thread. When a SET operation occurs, I update the cache immediately and queue the write operation. A background thread processes the queue and writes to disk. This gives us low latency for client responses while still persisting data. I use condition variables to efficiently wake the worker thread when work is available."
+
+### 6. RESP Protocol - Complete Explanation
+
+**What is RESP?**
+RESP (Redis Serialization Protocol) is a text-based protocol used by Redis for client-server communication. It's simple, efficient, and human-readable.
+
+**Why RESP?**
+- **Simple:** Easy to parse and implement
+- **Efficient:** Minimal overhead
+- **Binary-Safe:** Can handle any data
+- **Standard:** Compatible with Redis clients
+
+**Detailed Format:**
+
+**1. Simple Strings:**
+```
++OK\r\n
+```
+- Starts with `+`
+- Contains the string
+- Ends with `\r\n`
+- Used for success messages
+
+**2. Errors:**
+```
+-ERR wrong number of arguments\r\n
+```
+- Starts with `-`
+- Contains error message
+- Ends with `\r\n`
+- Used for error responses
+
+**3. Integers:**
+```
+:123\r\n
+```
+- Starts with `:`
+- Contains integer as string
+- Ends with `\r\n`
+- Used for numeric responses
+
+**4. Bulk Strings:**
+```
+$5\r\n
+hello\r\n
+```
+- Starts with `$` followed by length
+- Then `\r\n`
+- Then the actual string
+- Ends with `\r\n`
+- `$-1\r\n` means null/nil
+
+**5. Arrays:**
+```
+*3\r\n
+$3\r\n
+SET\r\n
+$5\r\n
+hello\r\n
+$5\r\n
+world\r\n
+```
+- Starts with `*` followed by element count
+- Each element is a bulk string
+- Used for commands with multiple arguments
+
+**Parsing Algorithm:**
+```cpp
+std::string parse_resp(std::string& buffer) {
+    // Find first \r\n
+    size_t pos = buffer.find("\r\n");
+    if (pos == std::string::npos) return "";  // Incomplete
+    
+    std::string line = buffer.substr(0, pos);
+    buffer = buffer.substr(pos + 2);
+    
+    if (line[0] == '*') {
+        // Array: *N\r\n$len1\r\narg1\r\n...
+        int count = std::stoi(line.substr(1));
+        std::vector<std::string> args;
+        for (int i = 0; i < count; i++) {
+            // Parse each bulk string
+            args.push_back(parse_bulk_string(buffer));
+        }
+        return build_command(args);
+    }
+    // ... handle other types
+}
+```
+
+**Interview Answer:**
+"RESP is a text-based protocol I use for client-server communication. It supports five data types: simple strings, errors, integers, bulk strings, and arrays. Commands are sent as arrays of bulk strings. For example, `SET hello world` becomes `*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n`. This format is simple to parse, efficient, and compatible with standard Redis clients."
+
+### 7. Binary vs Text Format - Complete Explanation
+
+**Binary Format (Part A):**
+
+**Structure:**
+```
+[Key Length (4 bytes)][Key Data][Value Length (4 bytes)][Value Data]
+```
+
+**Example:**
+```
+Key: "hello" (5 bytes)
+Value: "world" (5 bytes)
+
+Binary representation:
+[0x00 0x00 0x00 0x05][h e l l o][0x00 0x00 0x00 0x05][w o r l d]
+```
+
+**Advantages:**
+- **Size:** Smaller file size (no delimiters, no text encoding)
+- **Speed:** Faster read/write (no parsing needed)
+- **Efficiency:** Direct memory mapping possible
+- **Precision:** No loss of data (binary-safe)
+
+**Disadvantages:**
+- **Readability:** Not human-readable
+- **Debugging:** Hard to inspect
+- **Portability:** Endianness issues across platforms
+
+**Text Format (Part B):**
+
+**Structure:**
+```
+key=value\n
+```
+
+**Example:**
+```
+hello=world\n
+name=John\n
+```
+
+**Advantages:**
+- **Readability:** Human-readable
+- **Debugging:** Easy to inspect and edit
+- **Portability:** Works across platforms
+- **Simplicity:** Easy to implement
+
+**Disadvantages:**
+- **Size:** Larger file size
+- **Speed:** Slower (requires parsing)
+- **Encoding:** Must handle special characters
+
+**When to Use Which?**
+
+**Binary Format:**
+- Production systems
+- Large datasets
+- Performance-critical
+- Binary data
+
+**Text Format:**
+- Development/debugging
+- Small datasets
+- Human inspection needed
+- Simple implementation
+
+**Interview Answer:**
+"In Part A, I use binary format for efficiency. Each entry stores key length, key data, value length, and value data as raw bytes. This is faster and uses less space. In Part B, I use text format (key=value) for simplicity and debuggability. The choice depends on the use case: binary for production performance, text for development ease."
+
+### 8. Write Buffer and Batch Writes - Complete Explanation
+
+**What is Write Buffering?**
+Write buffering accumulates multiple write operations before writing them to disk together.
+
+**Why Buffer Writes?**
+
+**Without Buffering:**
+```
+SET key1 value1  -> Write to disk (10ms)
+SET key2 value2  -> Write to disk (10ms)
+SET key3 value3  -> Write to disk (10ms)
+Total: 30ms for 3 operations
+```
+
+**With Buffering:**
+```
+SET key1 value1  -> Add to buffer (0.1ms)
+SET key2 value2  -> Add to buffer (0.1ms)
+SET key3 value3  -> Add to buffer (0.1ms)
+Flush buffer     -> Write all at once (10ms)
+Total: 10.3ms for 3 operations
+```
+
+**Benefits:**
+- **Reduced I/O Operations:** Fewer disk seeks
+- **Better Throughput:** Batch operations are faster
+- **Sequential Writes:** Better than random writes
+- **Reduced System Calls:** Fewer kernel transitions
+
+**Trade-offs:**
+- **Data Loss Risk:** Buffered data lost on crash
+- **Delayed Persistence:** Data not immediately on disk
+- **Memory Usage:** Buffer consumes memory
+
+**Implementation:**
+```cpp
+std::vector<BatchEntry> write_buffer;
+
+void set(const std::string& key, const std::string& value) {
+    // Add to buffer
+    write_buffer.push_back({key, value});
+    
+    // Flush when buffer is full
+    if (write_buffer.size() >= BATCH_SIZE) {
+        flush_write_buffer();
+    }
+}
+
+void flush_write_buffer() {
+    // Open file once
+    std::ofstream file("data.dat", std::ios::app);
+    
+    // Write all entries sequentially
+    for (const auto& entry : write_buffer) {
+        write_entry(file, entry);
+    }
+    
+    write_buffer.clear();
+}
+```
+
+**Interview Answer:**
+"I use write buffering to improve performance. Instead of writing each operation to disk immediately, I accumulate writes in a buffer and flush them in batches. This reduces disk I/O operations and improves throughput. The trade-off is that data in the buffer could be lost on a crash, but for a key-value store, this is often acceptable for the performance gain."
+
+### 9. Disk Index - Complete Explanation
+
+**What is a Disk Index?**
+A disk index is a data structure that maps keys to their physical location on disk (offset and size).
+
+**Why Do We Need It?**
+
+**Without Index:**
+```
+To find "hello":
+1. Read entire file from start
+2. Parse each entry
+3. Compare keys
+4. Return when found
+Time: O(n) - linear scan
+```
+
+**With Index:**
+```
+To find "hello":
+1. Look up "hello" in index: O(1)
+2. Get offset and size
+3. Seek to offset: O(1)
+4. Read exact bytes needed
+Time: O(1) lookup + disk seek
+```
+
+**Structure:**
+```cpp
+struct DiskEntry {
+    size_t offset;  // Position in file
+    size_t size;    // Number of bytes
+};
+
+std::map<std::string, DiskEntry> disk_index;
+// "hello" -> {offset: 1024, size: 20}
+```
+
+**How It Works:**
+1. **On Write:**
+   - Write data to end of file
+   - Record current file position (offset)
+   - Calculate size of entry
+   - Add to index: `disk_index[key] = {offset, size}`
+
+2. **On Read:**
+   - Look up key in index: O(log n) for `std::map`
+   - Get offset and size
+   - Seek to offset in file
+   - Read exactly `size` bytes
+
+**Storage:**
+- Index stored in separate file (`index.dat`)
+- Loaded into memory on startup
+- Updated on every write
+- Enables fast lookups
+
+**Interview Answer:**
+"I maintain a disk index that maps keys to their location on disk. When I write an entry, I record its offset and size in the index. When reading, I look up the key in the index to get its exact location, then seek directly to that position. This gives O(1) lookup time instead of scanning the entire file, which is crucial for performance."
+
+### 10. Doubly-Linked List for LRU - Complete Explanation
+
+**Why Doubly-Linked List for LRU?**
+
+**Problem with Array/Vector:**
+- Moving element to front: O(n) (must shift all elements)
+- Removing from middle: O(n)
+
+**Problem with Singly-Linked List:**
+- Can't efficiently move node to front (need previous node)
+- Requires traversal to find previous
+
+**Solution: Doubly-Linked List:**
+- Each node has `prev` and `next` pointers
+- Can move node to front in O(1)
+- Can remove from anywhere in O(1)
+
+**Structure:**
+```cpp
+struct Node {
+    std::string key;
+    std::string value;
+    Node* prev;
+    Node* next;
+};
+
+Node* head;  // Most recently used
+Node* tail;  // Least recently used
+```
+
+**Operations:**
+
+**Move to Front (O(1)):**
+```cpp
+void move_to_front(Node* node) {
+    // Remove from current position
+    if (node->prev) node->prev->next = node->next;
+    if (node->next) node->next->prev = node->prev;
+    
+    // Add to front
+    node->prev = nullptr;
+    node->next = head;
+    if (head) head->prev = node;
+    head = node;
+}
+```
+
+**Remove Tail (O(1)):**
+```cpp
+void evict_lru() {
+    Node* old_tail = tail;
+    tail = tail->prev;
+    if (tail) tail->next = nullptr;
+    delete old_tail;
+}
+```
+
+**Why Not std::list?**
+- `std::list` is also doubly-linked
+- But custom implementation gives more control
+- Can optimize for specific use case
+- Direct pointer manipulation is faster
+
+**Interview Answer:**
+"I use a custom doubly-linked list for LRU because it allows O(1) operations for moving nodes to the front and removing from the tail. Each node has prev and next pointers, so I can efficiently rearrange the list. When an item is accessed, I move it to the head in O(1) time. When evicting, I remove the tail in O(1) time. This is much more efficient than using an array, which would require O(n) operations."
+
+### Common Interview Questions and Answers
+
+**Q: Why did you choose hash table over balanced tree?**
+A: "Hash tables provide O(1) average case complexity for all operations, while balanced trees are O(log n). For a key-value store where we need fast lookups, hash tables are the better choice. The trade-off is that hash tables don't maintain ordering, but for our use case, that's acceptable."
+
+**Q: How do you handle hash collisions?**
+A: "`std::unordered_map` uses chaining, where each bucket contains a linked list of entries that hash to the same index. When a collision occurs, the new entry is added to the list. Lookup involves hashing to find the bucket, then searching the list. With a good hash function and load factor, collisions are rare, so this is still effectively O(1)."
+
+**Q: Why is LRU better than FIFO for caching?**
+A: "LRU keeps recently accessed items, which are more likely to be accessed again due to temporal locality. FIFO evicts based on insertion order, which doesn't consider access patterns. LRU typically has a higher cache hit ratio, leading to better performance."
+
+**Q: How would you scale this to multiple machines?**
+A: "I would implement sharding, where keys are distributed across multiple servers using consistent hashing. I'd also add replication for fault tolerance. For coordination, I'd use a consensus algorithm like Raft. Each shard would run an instance of BLINK DB, and a coordinator would route requests to the appropriate shard."
+
+**Q: What happens if the system crashes with data in the write buffer?**
+A: "Data in the write buffer would be lost. To prevent this, I could implement write-ahead logging (WAL), where I write operations to a log file before applying them. On recovery, I'd replay the log. Alternatively, I could use fsync() to force writes to disk, but this would impact performance."
+
+**Q: Why use kqueue instead of select() or poll()?**
+A: "select() and poll() have O(n) complexity - they scan all file descriptors. kqueue has O(1) complexity for event notification and scales to thousands of connections. kqueue also provides more event types and is more efficient for high-concurrency servers."
+
+**Q: How do you ensure thread safety?**
+A: "All shared data structures are protected by mutexes. I use `std::lock_guard` with RAII to ensure locks are always released, even if exceptions occur. For the cache, I have a dedicated mutex. For the write queue, I use a separate mutex with condition variables for efficient thread communication."
+
+**Q: What's the time complexity of your GET operation?**
+A: "O(1) average case. I first check the hash map cache, which is O(1). If not found, I check the disk index, which is O(log n) for `std::map`, but could be O(1) if I used a hash map. Then I do a disk seek and read, which is O(1) in terms of data structure operations, though the actual I/O time depends on disk speed."
+
+**Q: How would you optimize this further?**
+A: "I could use memory-mapped files for faster disk access, implement lock-free data structures to reduce contention, add compression to reduce I/O, implement read-ahead caching, use multiple worker threads for disk I/O, and add connection pooling. I could also implement a more sophisticated eviction policy like LFU (Least Frequently Used) or adaptive policies."
+
+---
+
 ## Conclusion
 
 BLINK DB demonstrates the implementation of a complete key-value store from basic storage to advanced network server. The project covers:

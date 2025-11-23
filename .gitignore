@@ -63,3 +63,7 @@ part-b/disk_storage/*.txt
 
 # Node/npm (if any)
 node_modules/
+
+# Interview preparation documents (keep local only)
+BLINK_DB_Complete_Documentation.md
+BLINK_DB_Complete_Documentation.pdf
